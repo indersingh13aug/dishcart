@@ -1,7 +1,6 @@
 import streamlit as st
 from langgraph.graph import StateGraph
 import google.generativeai as genai
-# from ollama_client import ollama_chat
 import random
 import os
 import json
@@ -31,7 +30,6 @@ def gemini_chat(prompt: str) -> str:
 
     if response.status_code == 200:
         result = response.json()
-        print(result)
         return result['candidates'][0]['content']['parts'][0]['text']
     else:
         return f"Error: {response.status_code} - {response.text}"
@@ -164,7 +162,6 @@ def orchestrator_node(state: dict[str, Any]) -> dict[str, Any]:
     user_msg = state["user_message"]
     user_id = state["user_id"]
 
-    # classify
     classification_prompt = f"""
     Classify this user message into one of:
     - recipe_request
@@ -242,6 +239,11 @@ st.markdown(
         border-radius: 10px;
         margin: 5px 0;
     }
+    .chat-history {
+        max-height: 80vh;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -252,34 +254,11 @@ st.title("🍳 DishCart - Recipe & Shopping Assistant")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# user
 user_name = st.text_input("Enter your name:", value="guest")
 
-st.subheader("Chat with your AI Chef")
-
-# col1, col2 = st.columns([4,1])
 left_col, right_col = st.columns([2, 3])
 
-# LEFT COLUMN → Chat history
-with left_col:
-    st.subheader("💬 Conversation History")
-
-    if st.session_state.chat_history:
-        for role, msg in st.session_state.chat_history:
-            if role == "user":
-                st.markdown(
-                    f'<div class="user-msg"><strong>You:</strong> {msg}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f'<div class="bot-msg"><strong>Bot:</strong> {msg}</div>',
-                    unsafe_allow_html=True,
-                )
-    else:
-        st.info("No conversation yet. Start chatting!")
-
-# RIGHT COLUMN → Chat input and controls
+# RIGHT column (chat input and actions)
 with right_col:
     st.subheader("🤖 Chat with your AI Chef")
 
@@ -292,7 +271,8 @@ with right_col:
             "user_id": user_name,
             "user_message": user_message,
         }
-        result = app.invoke(state_in)
+        with st.spinner("Thinking..."):
+            result = app.invoke(state_in)
 
         st.session_state.chat_history.append(("user", user_message))
         st.session_state.chat_history.append(("bot", result["assistant_message"]))
@@ -321,3 +301,38 @@ with right_col:
             st.session_state.chat_history.append(("bot", response))
         else:
             st.warning("Enter item name to remove.")
+
+# LEFT column (history) - placed LAST so it sees the updated history
+with left_col:
+    st.subheader("💬 Conversation History")
+    st.markdown('<div class="chat-history">', unsafe_allow_html=True)
+
+    if st.session_state.chat_history:
+        # Group into user-bot pairs
+        pairs = []
+        temp = []
+        for role, msg in st.session_state.chat_history:
+            temp.append((role, msg))
+            if len(temp) == 2:
+                pairs.append(temp)
+                temp = []
+        if temp:
+            pairs.append(temp)
+
+        # Display pairs in descending order
+        for pair in reversed(pairs):
+            for role, msg in pair:
+                if role == "user":
+                    st.markdown(
+                        f'<div class="user-msg"><strong>You:</strong> {msg}</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f'<div class="bot-msg"><strong>Bot:</strong> {msg}</div>',
+                        unsafe_allow_html=True,
+                    )
+    else:
+        st.info("No conversation yet. Start chatting!")
+
+    st.markdown('</div>', unsafe_allow_html=True)
